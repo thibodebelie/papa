@@ -43,13 +43,17 @@ def code_to_label(code: str) -> str:
 
 
 def doctor_label(verstrekker: str, email: str) -> str:
-    """Maak een leesbare dokternaam op basis van e-mail, met Verstrekker-ID als fallback."""
+    """Maak een leesbare dokternaam op basis van de voornaam uit de e-mail, met Verstrekker-ID als fallback."""
     if isinstance(email, str) and "@" in email:
+        # Haal het gedeelte voor de '@' op (bijv. 'bruno.janssens')
         local = email.split("@")[0]
+        # Splits op punten, underscores of streepjes
         parts = re.split(r"[._\-]+", local)
-        naam = " ".join(p.capitalize() for p in parts if p)
-        if naam:
-            return naam
+        # Filter lege strings en neem de allereerste herkenbare naam (bijv. 'bruno')
+        valid_parts = [p for p in parts if p]
+        if valid_parts:
+            # Capitalize alleen de voornaam (bijv. 'Bruno')
+            return valid_parts[0].capitalize()
     return str(verstrekker)
 
 
