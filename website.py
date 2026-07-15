@@ -13,7 +13,10 @@ from datetime import datetime
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go  # <-- Deze toevoegen bovenaan je script
+
 import streamlit as st
+
 
 st.set_page_config(
     page_title="Mediris eFact Analyse",
@@ -43,17 +46,23 @@ def code_to_label(code: str) -> str:
 
 
 def doctor_label(verstrekker: str, email: str) -> str:
-    """Maak een leesbare dokternaam op basis van de voornaam uit de e-mail, met Verstrekker-ID als fallback."""
+    """Maak een leesbare dokternaam op basis van e-mail, met Verstrekker-ID als fallback."""
     if isinstance(email, str) and "@" in email:
-        # Haal het gedeelte voor de '@' op (bijv. 'bruno.janssens')
         local = email.split("@")[0]
-        # Splits op punten, underscores of streepjes
         parts = re.split(r"[._\-]+", local)
-        # Filter lege strings en neem de allereerste herkenbare naam (bijv. 'bruno')
-        valid_parts = [p for p in parts if p]
-        if valid_parts:
-            # Capitalize alleen de voornaam (bijv. 'Bruno')
-            return valid_parts[0].capitalize()
+        naam = " ".join(p.capitalize() for p in parts if p)
+        
+        if naam:
+            # --- OVERRIDE FOR BRUNO ---
+            # Als de gegenereerde naam 'Brunodebelie' (of 'Bruno De Belie') is,
+            # forceer deze dan direct naar 'Bruno'.
+            clean_naam = naam.replace(" ", "").lower()
+            if "brunodebelie" in clean_naam:
+                return "Bruno"
+            
+            # Voor de andere artsen (Eva, Erika, Jelle, Alexandra) pakken we de voornaam:
+            return parts[0].capitalize()
+            
     return str(verstrekker)
 
 
@@ -244,8 +253,50 @@ with tab_overzicht:
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Per dokter --------------------------------------------------------
+# with tab_dokters:
+#     st.markdown("### Overzicht per dokter")
+#     per_dokter = cdf.groupby("Dokter").agg(
+#         Consultaties=("Id", "count"),
+#         Unieke_patienten=("Patiënt", "nunique"),
+#         Omzet=("Totaal", "sum"),
+#         Gem_per_consult=("Totaal", "mean"),
+#     ).reset_index().sort_values("Consultaties", ascending=False)
+#     per_dokter.columns = ["Dokter", "Consultaties", "Unieke patiënten", "Omzet (€)", "Gem. per consult (€)"]
+#     st.dataframe(
+#         per_dokter.style.format({"Omzet (€)": "{:,.2f}", "Gem. per consult (€)": "{:,.2f}"}),
+#         use_container_width=True,
+#         hide_index=True,
+#     )
+
+#     col1, col2 = st.columns(2)
+#     with col1:
+#         fig = px.bar(per_dokter, x="Dokter", y="Consultaties", title="Aantal consultaties per dokter")
+#         st.plotly_chart(fig, use_container_width=True)
+#     with col2:
+#         fig = px.bar(per_dokter, x="Dokter", y="Omzet (€)", title="Omzet per dokter (€)")
+#         st.plotly_chart(fig, use_container_width=True)
+
+#     st.markdown("### Consultaties per dokter doorheen de tijd")
+#     if cdf["Datum"].notna().any():
+#         tijd = cdf.dropna(subset=["Datum"]).copy()
+#         tijd["Maand"] = tijd["Datum"].dt.to_period("M").dt.to_timestamp()
+#         per_maand_dokter = tijd.groupby(["Maand", "Dokter"]).size().reset_index(name="Consultaties")
+#         fig = px.line(per_maand_dokter, x="Maand", y="Consultaties", color="Dokter", markers=True)
+#         st.plotly_chart(fig, use_container_width=True)
+
+        # --- Per dokter --------------------------------------------------------
 with tab_dokters:
     st.markdown("### Overzicht per dokter")
+    
+    # 1. Definieer vaste, herkenbare kleuren voor elke dokter
+    DOCTOR_COLORS = {
+        "Bruno": "#1f77b4",       # Blauw
+        "Eva": "#e377c2",         # Roze
+        "Erika": "#2ca02c",       # Groen
+        "Jelle": "#ff7f0e",       # Oranje
+        "Alexandra": "#9467bd"    # Paars
+    }
+    
     per_dokter = cdf.groupby("Dokter").agg(
         Consultaties=("Id", "count"),
         Unieke_patienten=("Patiënt", "nunique"),
@@ -253,18 +304,40 @@ with tab_dokters:
         Gem_per_consult=("Totaal", "mean"),
     ).reset_index().sort_values("Consultaties", ascending=False)
     per_dokter.columns = ["Dokter", "Consultaties", "Unieke patiënten", "Omzet (€)", "Gem. per consult (€)"]
+    
     st.dataframe(
         per_dokter.style.format({"Omzet (€)": "{:,.2f}", "Gem. per consult (€)": "{:,.2f}"}),
         use_container_width=True,
         hide_index=True,
     )
 
+    st.info("💡 **Tip:** Klik op de naam van een dokter in de legende van de grafieken om deze aan of uit te zetten.")
+
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.bar(per_dokter, x="Dokter", y="Consultaties", title="Aantal consultaties per dokter")
+        # Toegevoegd: color="Dokter" en color_discrete_map voor individuele kleuren en toggle-functionaliteit
+        fig = px.bar(
+            per_dokter, 
+            x="Dokter", 
+            y="Consultaties", 
+            color="Dokter",
+            color_discrete_map=DOCTOR_COLORS,
+            title="Aantal consultaties per dokter"
+        )
+        # Zorgt ervoor dat de legende altijd klikbaar is om te filteren
+        fig.update_layout(clickmode='event+select') 
         st.plotly_chart(fig, use_container_width=True)
+        
     with col2:
-        fig = px.bar(per_dokter, x="Dokter", y="Omzet (€)", title="Omzet per dokter (€)")
+        # Toegevoegd: color="Dokter" en color_discrete_map
+        fig = px.bar(
+            per_dokter, 
+            x="Dokter", 
+            y="Omzet (€)", 
+            color="Dokter",
+            color_discrete_map=DOCTOR_COLORS,
+            title="Omzet per dokter (€)"
+        )
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("### Consultaties per dokter doorheen de tijd")
@@ -272,7 +345,16 @@ with tab_dokters:
         tijd = cdf.dropna(subset=["Datum"]).copy()
         tijd["Maand"] = tijd["Datum"].dt.to_period("M").dt.to_timestamp()
         per_maand_dokter = tijd.groupby(["Maand", "Dokter"]).size().reset_index(name="Consultaties")
-        fig = px.line(per_maand_dokter, x="Maand", y="Consultaties", color="Dokter", markers=True)
+        
+        # Toegevoegd: color_discrete_map voor consistente lijnkleuren per dokter
+        fig = px.line(
+            per_maand_dokter, 
+            x="Maand", 
+            y="Consultaties", 
+            color="Dokter", 
+            color_discrete_map=DOCTOR_COLORS,
+            markers=True
+        )
         st.plotly_chart(fig, use_container_width=True)
 
 # --- Patiënten: terugkerend vs nieuw -----------------------------------
